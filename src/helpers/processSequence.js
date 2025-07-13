@@ -14,38 +14,52 @@
  * Иногда промисы от API будут приходить в состояние rejected, (прямо как и API в реальной жизни)
  * Ответ будет приходить в поле {result}
  */
- import Api from '../tools/api';
 
- const api = new Api();
+import * as R from 'ramda';
 
- /**
-  * Я – пример, удали меня
-  */
- const wait = time => new Promise(resolve => {
-     setTimeout(resolve, time);
- })
+import Api from '../tools/api';
 
- const processSequence = ({value, writeLog, handleSuccess, handleError}) => {
-     /**
-      * Я – пример, удали меня
-      */
-     writeLog(value);
+const api = new Api();
 
-     api.get('https://api.tech/numbers/base', {from: 2, to: 10, number: '01011010101'}).then(({result}) => {
-         writeLog(result);
-     });
+// Вспомогательные функции
+const isLengthLessThan10 = R.compose(R.lt(R.__, 10), R.length);
+const isLengthGreaterThan2 = R.compose(R.gt(R.__, 2), R.length);
+const isValidLength = R.both(isLengthGreaterThan2, isLengthLessThan10);
+const isPositiveDecimalString = R.test(/^[0-9]+\.?[0-9]*$/); // Только цифры и точка
+const isValidInput = R.allPass([
+  isValidLength,
+  isPositiveDecimalString
+]);
 
-     wait(2500).then(() => {
-         writeLog('SecondLog')
+const parseAndRound = R.compose(Math.round, parseFloat);
 
-         return wait(1500);
-     }).then(() => {
-         writeLog('ThirdLog');
+// API-функции
+const convertBase = api.get('https://api.tech/numbers/base');
+const getAnimalById = (id) => api.get(`https://animals.tech/${Number(id)}`)(id);
 
-         return wait(400);
-     }).then(() => {
-         handleSuccess('Done');
-     });
- }
+// Основной процесс
+const processSequence = ({ value, writeLog, handleSuccess, handleError }) => {
+  Promise.resolve(value)
+    .then(R.tap(writeLog))
+    .then(R.when(
+      R.complement(isValidInput),
+      () => Promise.reject('ValidationError')
+    ))
+    .then(parseAndRound)
+    .then(R.tap(writeLog))
+    .then(number => convertBase({ number, from: 10, to: 2 }))
+    .then(R.prop('result'))
+    .then(R.tap(writeLog))
+    .then(R.length)
+    .then(R.tap(writeLog))
+    .then(x => x * x)
+    .then(R.tap(writeLog))
+    .then(x => x % 3)
+    .then(R.tap(writeLog))
+    .then(getAnimalById)
+    .then(R.prop('result'))
+    .then(handleSuccess)
+    .catch(handleError);
+};
 
 export default processSequence;
